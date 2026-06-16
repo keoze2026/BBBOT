@@ -36,7 +36,7 @@ const WORKSPACES = [
 
 // Only these campaigns are included in all statistics and reports
 const INCLUDED_CAMPAIGNS = [
-  'Camp - BBB', 'Camp - BBB 2'
+  'Camp-BBB', 'Camp-BBB 2'
 ];
 
 // Types
