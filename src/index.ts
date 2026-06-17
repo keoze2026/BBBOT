@@ -331,12 +331,14 @@ const isCallConnected = (call: CallData): boolean => {
   return hasCompletedStatus || hasDurationAndNotFailed;
 };
 
-// A call is "qualified" when it converted (buyer-side conversion).
-// In the API this is status.name === "Completed - With Conversion"
-// (equivalently revenue > 0). Qualified is a subset of connected.
+// A call is "qualified" when it converted on the vendor/payout side.
+// In the API this is vendor_status.name === "Completed - With Conversion"
+// (equivalently payout > 0). This matches the workspace UI's "Qualified"
+// column: it excludes duplicate calls that the buyer paid revenue on but
+// the vendor was not credited for. Qualified is a subset of connected.
 const isCallQualified = (call: CallData): boolean => {
-  const statusName = call.status?.name?.toLowerCase() || '';
-  return statusName.includes('with conversion');
+  const vendorStatusName = call.vendor_status?.name?.toLowerCase() || '';
+  return vendorStatusName.includes('with conversion');
 };
 
 const calculateCampaignStats = (calls: CallData[]): Map<string, CampaignStats> => {
