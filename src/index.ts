@@ -907,10 +907,6 @@ bot.command('flow', async (ctx) => {
 
       text += `<b>Total Flow:</b> ${totalFlow}(live)\n`;
 
-      if (totalFlow < 60) {
-        text += '<b>ALERT:</b> Check Flow Kindly\n';
-      }
-
       text += `\n<b>Total Qualified:</b> ${totalQualified}`;
       
       await ctx.reply(text, { parse_mode: 'HTML' });
@@ -940,10 +936,6 @@ bot.command('flow', async (ctx) => {
           text += '</pre>\n';
 
           text += `<b>Total Flow:</b>= ${totalFlow}(live)\n`;
-
-          if (totalFlow < 60) {
-            text += '<b>ALERT:</b> Check Flow Kindly\n';
-          }
 
           text += `\n<b>Total Qualified:</b> ${totalQualified}`;
 
@@ -980,10 +972,6 @@ bot.command('flow', async (ctx) => {
       text += '</pre>\n';
 
       text += `<b>Total Flow:</b> ${totalFlow}(live)\n`;
-
-      if (totalFlow < 60) {
-        text += '<b>ALERT:</b> Check Flow Kindly\n';
-      }
 
       text += `\n<b>Total Qualified:</b> ${totalQualified}`;
 
