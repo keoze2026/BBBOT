@@ -80,6 +80,7 @@ interface CampaignStats {
   live: number;
   incoming: number;
   connected: number;
+  qualified: number;
   totalDuration: number;
   aht: number;
   tfns: Map<string, TFNStats>;
@@ -330,6 +331,14 @@ const isCallConnected = (call: CallData): boolean => {
   return hasCompletedStatus || hasDurationAndNotFailed;
 };
 
+// A call is "qualified" when it converted (buyer-side conversion).
+// In the API this is status.name === "Completed - With Conversion"
+// (equivalently revenue > 0). Qualified is a subset of connected.
+const isCallQualified = (call: CallData): boolean => {
+  const statusName = call.status?.name?.toLowerCase() || '';
+  return statusName.includes('with conversion');
+};
+
 const calculateCampaignStats = (calls: CallData[]): Map<string, CampaignStats> => {
   const stats = new Map<string, CampaignStats>();
   
@@ -347,6 +356,7 @@ const calculateCampaignStats = (calls: CallData[]): Map<string, CampaignStats> =
         live: 0,
         incoming: 0,
         connected: 0,
+        qualified: 0,
         totalDuration: 0,
         aht: 0,
         tfns: new Map(),
@@ -392,6 +402,11 @@ const calculateCampaignStats = (calls: CallData[]): Map<string, CampaignStats> =
       if (duration > 0) {
         tfnStats.totalDuration += duration;
       }
+    }
+
+    // Count qualified (converted) calls — a subset of connected
+    if (isCallQualified(call)) {
+      campaignStats.qualified++;
     }
   }
   
@@ -444,8 +459,9 @@ const formatCampaignStats = (stats: Map<string, CampaignStats>, date: string): s
     const campaignDisplay = extractCampaignNumber(s.name);
     text += `Campaign: ${campaignDisplay}\n`;
     text += `∙ Live: ${s.live}\n`;
-    text += `∙ Qualified leads: ${s.connected}\n`;
-    text += `∙ Qualified leads AHT: ${formatDuration(s.aht)}\n`;
+    text += `∙ Connected: ${s.connected}\n`;
+    text += `∙ Qualified: ${s.qualified}\n`;
+    text += `∙ Connected AHT: ${formatDuration(s.aht)}\n`;
     
     // Add separator line if not the last campaign
     if (index < sortedStats.length - 1) {
@@ -494,8 +510,9 @@ const formatTFNStats = (stats: Map<string, CampaignStats>, date: string): string
     }
     
     text += `∙ Live: ${s.live}\n`;
-    text += `∙ Qualified leads: ${s.connected}\n`;
-    text += `∙ Qualified leads AHT: ${formatDuration(s.aht)}\n`;
+    text += `∙ Connected: ${s.connected}\n`;
+    text += `∙ Qualified: ${s.qualified}\n`;
+    text += `∙ Connected AHT: ${formatDuration(s.aht)}\n`;
     
     // Add separator line if not the last campaign
     if (index < sortedStats.length - 1) {
@@ -518,6 +535,14 @@ const calculateTotalConnected = (stats: Map<string, CampaignStats>): number => {
   let total = 0;
   stats.forEach(s => {
     total += s.connected;
+  });
+  return total;
+};
+
+const calculateTotalQualified = (stats: Map<string, CampaignStats>): number => {
+  let total = 0;
+  stats.forEach(s => {
+    total += s.qualified;
   });
   return total;
 };
@@ -884,6 +909,7 @@ bot.command('flow', async (ctx) => {
       const stats = calculateCampaignStats(calls);
       const totalFlow = calculateTotalFlow(stats);
       const totalConnected = calculateTotalConnected(stats);
+      const totalQualified = calculateTotalQualified(stats);
 
       let text = `<b>Flow Check (${session.date})</b>\n\n`;
       text += '<b>Campaign Breakdown:</b>\n';
@@ -907,7 +933,8 @@ bot.command('flow', async (ctx) => {
         text += '<b>ALERT:</b> Check Flow Kindly\n';
       }
 
-      text += `\n<b>Total Qualified leads:</b> ${totalConnected}`;
+      text += `\n<b>Total Connected:</b> ${totalConnected}`;
+      text += `\n<b>Total Qualified:</b> ${totalQualified}`;
       
       await ctx.reply(text, { parse_mode: 'HTML' });
       
@@ -918,6 +945,7 @@ bot.command('flow', async (ctx) => {
           const stats = calculateCampaignStats(calls);
           const totalFlow = calculateTotalFlow(stats);
           const totalConnected = calculateTotalConnected(stats);
+      const totalQualified = calculateTotalQualified(stats);
 
           let text = `<b>Flow Check (${session.date})</b>\n\n`;
           text += '<b>Campaign Breakdown:</b>\n';
@@ -941,7 +969,8 @@ bot.command('flow', async (ctx) => {
             text += '<b>ALERT:</b> Check Flow Kindly\n';
           }
 
-          text += `\n<b>Total Qualified leads:</b> ${totalConnected}`;
+          text += `\n<b>Total Connected:</b> ${totalConnected}`;
+          text += `\n<b>Total Qualified:</b> ${totalQualified}`;
 
           await ctx.telegram.sendMessage(chatId, text, { parse_mode: 'HTML' });
         } catch (error: any) {
@@ -958,6 +987,7 @@ bot.command('flow', async (ctx) => {
       const stats = calculateCampaignStats(calls);
       const totalFlow = calculateTotalFlow(stats);
       const totalConnected = calculateTotalConnected(stats);
+      const totalQualified = calculateTotalQualified(stats);
 
       let text = `<b>Flow Check (${session.date})</b>\n\n`;
       text += '<b>Campaign Breakdown:</b>\n';
@@ -981,7 +1011,8 @@ bot.command('flow', async (ctx) => {
         text += '<b>ALERT:</b> Check Flow Kindly\n';
       }
 
-      text += `\n<b>Total Qualified leads:</b> ${totalConnected}`;
+      text += `\n<b>Total Connected:</b> ${totalConnected}`;
+      text += `\n<b>Total Qualified:</b> ${totalQualified}`;
 
       await ctx.reply(text, { parse_mode: 'HTML' });
     }
