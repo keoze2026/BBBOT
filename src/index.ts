@@ -71,7 +71,7 @@ interface TFNStats {
   tfn: string;
   liveCount: number;
   totalDuration: number;
-  connectedCount: number;
+  qualifiedCount: number;
   aht: number;
 }
 
@@ -79,7 +79,6 @@ interface CampaignStats {
   name: string;
   live: number;
   incoming: number;
-  connected: number;
   qualified: number;
   totalDuration: number;
   aht: number;
@@ -357,7 +356,6 @@ const calculateCampaignStats = (calls: CallData[]): Map<string, CampaignStats> =
         name: campaignName,
         live: 0,
         incoming: 0,
-        connected: 0,
         qualified: 0,
         totalDuration: 0,
         aht: 0,
@@ -373,7 +371,7 @@ const calculateCampaignStats = (calls: CallData[]): Map<string, CampaignStats> =
     
     // Initialize TFN stats if not exists
     if (!campaignStats.tfns.has(tfn)) {
-      campaignStats.tfns.set(tfn, { tfn, liveCount: 0, totalDuration: 0, connectedCount: 0, aht: 0 });
+      campaignStats.tfns.set(tfn, { tfn, liveCount: 0, totalDuration: 0, qualifiedCount: 0, aht: 0 });
     }
     
     // Track TFN live calls
@@ -386,42 +384,31 @@ const calculateCampaignStats = (calls: CallData[]): Map<string, CampaignStats> =
       campaignStats.incoming++;
     }
     
-    // Check if call is connected
-    const isConnected = isCallConnected(call);
-    
-    if (isConnected) {
-      campaignStats.connected++;
-      
+    // Count qualified (converted) calls and accumulate their handle time
+    if (isCallQualified(call)) {
+      campaignStats.qualified++;
+
+      const tfnStats = campaignStats.tfns.get(tfn)!;
+      tfnStats.qualifiedCount++;
+
       // Only add duration if > 0 (for AHT calculation)
       if (duration > 0) {
         campaignStats.totalDuration += duration;
-      }
-      
-      // Track TFN duration and connected count
-      const tfnStats = campaignStats.tfns.get(tfn)!;
-      tfnStats.connectedCount++;
-      
-      if (duration > 0) {
         tfnStats.totalDuration += duration;
       }
     }
-
-    // Count qualified (converted) calls — a subset of connected
-    if (isCallQualified(call)) {
-      campaignStats.qualified++;
-    }
   }
   
-  // Calculate AHT for campaigns and TFNs
+  // Calculate AHT (over qualified calls) for campaigns and TFNs
   stats.forEach(s => {
-    if (s.connected > 0) {
-      s.aht = s.totalDuration / s.connected;
+    if (s.qualified > 0) {
+      s.aht = s.totalDuration / s.qualified;
     }
-    
+
     // Calculate AHT for each TFN
     s.tfns.forEach(tfnStats => {
-      if (tfnStats.connectedCount > 0) {
-        tfnStats.aht = tfnStats.totalDuration / tfnStats.connectedCount;
+      if (tfnStats.qualifiedCount > 0) {
+        tfnStats.aht = tfnStats.totalDuration / tfnStats.qualifiedCount;
       }
     });
   });
@@ -461,16 +448,15 @@ const formatCampaignStats = (stats: Map<string, CampaignStats>, date: string): s
     const campaignDisplay = extractCampaignNumber(s.name);
     text += `Campaign: ${campaignDisplay}\n`;
     text += `∙ Live: ${s.live}\n`;
-    text += `∙ Connected: ${s.connected}\n`;
     text += `∙ Qualified: ${s.qualified}\n`;
-    text += `∙ Connected AHT: ${formatDuration(s.aht)}\n`;
-    
+    text += `∙ Qualified AHT: ${formatDuration(s.aht)}\n`;
+
     // Add separator line if not the last campaign
     if (index < sortedStats.length - 1) {
       text += `--------------------------------                           \n`;
     }
   });
-  
+
   return text.trim();
 };
 
@@ -485,36 +471,35 @@ const formatTFNStats = (stats: Map<string, CampaignStats>, date: string): string
     const campaignDisplay = extractCampaignNumber(s.name);
     text += `Campaign: ${campaignDisplay}\n\n`;
     
-    // Sort TFNs by connected calls in descending order (highest first)
+    // Sort TFNs by qualified calls in descending order (highest first)
     const sortedTfns = Array.from(s.tfns.values())
-      .filter(tfn => tfn.connectedCount > 0)
-      .sort((a, b) => b.connectedCount - a.connectedCount);
-    
+      .filter(tfn => tfn.qualifiedCount > 0)
+      .sort((a, b) => b.qualifiedCount - a.qualifiedCount);
+
     if (sortedTfns.length > 0) {
       text += `∙ TFNs:\n`;
-      
+
       // Find the maximum TFN length and count length for alignment
       const maxTfnLength = Math.max(...sortedTfns.map(tfn => tfn.tfn.length));
-      const maxCountLength = Math.max(...sortedTfns.map(tfn => tfn.connectedCount.toString().length));
-      
+      const maxCountLength = Math.max(...sortedTfns.map(tfn => tfn.qualifiedCount.toString().length));
+
       // Use pre-formatted block for monospace
       text += '<pre>';
-      
+
       sortedTfns.forEach(tfn => {
         const tfnPadded = tfn.tfn.padEnd(maxTfnLength);
-        const countStr = tfn.connectedCount.toString();
+        const countStr = tfn.qualifiedCount.toString();
         const countPadded = countStr.padStart(maxCountLength);
-        
+
         text += `  ${tfnPadded}: ${countPadded}    (AHT: ${formatDuration(tfn.aht)})\n`;
       });
-      
+
       text += '</pre>\n';
     }
-    
+
     text += `∙ Live: ${s.live}\n`;
-    text += `∙ Connected: ${s.connected}\n`;
     text += `∙ Qualified: ${s.qualified}\n`;
-    text += `∙ Connected AHT: ${formatDuration(s.aht)}\n`;
+    text += `∙ Qualified AHT: ${formatDuration(s.aht)}\n`;
     
     // Add separator line if not the last campaign
     if (index < sortedStats.length - 1) {
@@ -529,14 +514,6 @@ const calculateTotalFlow = (stats: Map<string, CampaignStats>): number => {
   let total = 0;
   stats.forEach(s => {
     total += s.live;
-  });
-  return total;
-};
-
-const calculateTotalConnected = (stats: Map<string, CampaignStats>): number => {
-  let total = 0;
-  stats.forEach(s => {
-    total += s.connected;
   });
   return total;
 };
@@ -910,7 +887,6 @@ bot.command('flow', async (ctx) => {
       const calls = await fetchAllCallsFromMultipleWorkspaces(WORKSPACES, session.date, false, session);
       const stats = calculateCampaignStats(calls);
       const totalFlow = calculateTotalFlow(stats);
-      const totalConnected = calculateTotalConnected(stats);
       const totalQualified = calculateTotalQualified(stats);
 
       let text = `<b>Flow Check (${session.date})</b>\n\n`;
@@ -935,7 +911,6 @@ bot.command('flow', async (ctx) => {
         text += '<b>ALERT:</b> Check Flow Kindly\n';
       }
 
-      text += `\n<b>Total Connected:</b> ${totalConnected}`;
       text += `\n<b>Total Qualified:</b> ${totalQualified}`;
       
       await ctx.reply(text, { parse_mode: 'HTML' });
@@ -946,8 +921,7 @@ bot.command('flow', async (ctx) => {
           const calls = await fetchAllCallsFromMultipleWorkspaces(WORKSPACES, session.date, false, session);
           const stats = calculateCampaignStats(calls);
           const totalFlow = calculateTotalFlow(stats);
-          const totalConnected = calculateTotalConnected(stats);
-      const totalQualified = calculateTotalQualified(stats);
+          const totalQualified = calculateTotalQualified(stats);
 
           let text = `<b>Flow Check (${session.date})</b>\n\n`;
           text += '<b>Campaign Breakdown:</b>\n';
@@ -971,7 +945,6 @@ bot.command('flow', async (ctx) => {
             text += '<b>ALERT:</b> Check Flow Kindly\n';
           }
 
-          text += `\n<b>Total Connected:</b> ${totalConnected}`;
           text += `\n<b>Total Qualified:</b> ${totalQualified}`;
 
           await ctx.telegram.sendMessage(chatId, text, { parse_mode: 'HTML' });
@@ -988,7 +961,6 @@ bot.command('flow', async (ctx) => {
       const calls = await fetchAllCallsFromMultipleWorkspaces(WORKSPACES, session.date, false, session);
       const stats = calculateCampaignStats(calls);
       const totalFlow = calculateTotalFlow(stats);
-      const totalConnected = calculateTotalConnected(stats);
       const totalQualified = calculateTotalQualified(stats);
 
       let text = `<b>Flow Check (${session.date})</b>\n\n`;
@@ -1013,7 +985,6 @@ bot.command('flow', async (ctx) => {
         text += '<b>ALERT:</b> Check Flow Kindly\n';
       }
 
-      text += `\n<b>Total Connected:</b> ${totalConnected}`;
       text += `\n<b>Total Qualified:</b> ${totalQualified}`;
 
       await ctx.reply(text, { parse_mode: 'HTML' });
